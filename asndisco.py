@@ -10,15 +10,16 @@ def getDataTable():
   if args.cached == True:
     data = open('data-raw-table', 'r')
     text = data.read()
-    #print(text)
-    pass
+    data.close()
   else:
     print("begin download")
-    data=requests.get("http://thyme.apnic.net/current/data-raw-table")
+    data = requests.get("http://thyme.apnic.net/current/data-raw-table")
     print("finish download")
-    print(data.status_code)
-    text=data.text
-  parsed=text.splitlines()[0:100]
+    text = data.text
+    output = open('data-raw-table', 'w')
+    output.write(text)
+    output.close()
+  parsed = text.splitlines()[0:100]
   lookupDict = {}
   for line in parsed:
     lineDict = {}
@@ -28,7 +29,6 @@ def getDataTable():
   pass
 
 def main():
-  print(args.cached)
   getDataTable()
   pass
 
