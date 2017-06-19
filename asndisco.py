@@ -20,16 +20,18 @@ def getDataTable():
     output.write(text)
     output.close()
   parsed = text.splitlines()[0:100]
-  lookupDict = {}
+  lookupDict = []
   for line in parsed:
     lineDict = {}
     lineDict['subnet'] = line.split('\t')[0]
     lineDict['asn'] = line.split('\t')[1]
     print(lineDict)
-  pass
+    lookupDict.append(lineDict)
+  return lookupDict
 
 def main():
-  getDataTable()
+  asnTable=getDataTable()
+  print(asnTable)
   pass
 
 if __name__=="__main__":
