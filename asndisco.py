@@ -23,7 +23,7 @@ def getDataTable():
     output.write(text)
     output.close()
   # debug line
-  #parsed = text.splitlines()[0:100]
+  #parsed = text.splitlines()[0:10000]
   parsed = text.splitlines()
   lookupDict = []
   for line in parsed:
@@ -36,25 +36,26 @@ def getDataTable():
 def parseDataTable(dataTable):
   for lineDict in dataTable:
     lineDict['network'] = lineDict['subnet'].split('/')[0]
-    lineDict['mask'] = lineDict['subnet'].split('/')[1]
-  madeChange = True
-  #print(dataTable)
-  print("begin bubblesort")
-  while madeChange == True:
-    madeChange = False
-    for i in range(len(dataTable)-1):
-      if dataTable[i]['mask'] < dataTable[i+1]['mask']:
-        temp = dataTable.pop(i)
-        #print(temp)
-        dataTable.insert(i+1,temp)
-        madeChange = True
-  print("end bubblesort")
-  return dataTable
+    lineDict['mask'] = int(lineDict['subnet'].split('/')[1])
+  print("begin insertsort")
+  sortTable = []
+  for i in reversed(range(8,33)):
+    sortTable.append((i,[]))
+  for lineDict in dataTable:
+    for thing in sortTable:
+      if thing[0] == lineDict['mask']:
+        thing[1].append(lineDict)
+        break
+  print("end insertsort")
+  returnTable = []
+  for item in sortTable:
+    returnTable = returnTable+item[1]
+  return returnTable
 
 def main():
   asnTable=getDataTable()
   asnTable=parseDataTable(asnTable)
-  #print(asnTable)
+  print(asnTable)
   for line in asnTable:
     #print(line['mask'])
     pass
