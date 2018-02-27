@@ -37,9 +37,11 @@ def getDataTable():
   return lookupDict
 
 def parseDataTable(dataTable):
+  if args.debug == True: print("build dict started")
   for lineDict in dataTable:
     lineDict['network'] = ipaddress.IPv4Network(lineDict['subnet'])
     lineDict['mask'] = int(lineDict['subnet'].split('/')[1])
+  if args.debug == True: print("build dict complete")
   if args.debug == True: print("begin insertsort")
   sortTable = []
   for i in reversed(range(8,33)):
