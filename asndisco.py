@@ -79,7 +79,7 @@ def openDataFile(infile):
 
 
 def buildCombinedTable(asnTable, dataTable):
-    combinedTable = []
+    combinedTable = {}
     detailedTable = []
     dataTableLen = len(dataTable)
     progress = int()
@@ -101,6 +101,40 @@ def buildCombinedTable(asnTable, dataTable):
                 dictToAppend["sum(bytes_in)"] = dataRow["sum(bytes_in)"]
                 dictToAppend["sum(bytes_out)"] = dataRow["sum(bytes_out)"]
                 dictToAppend["count"] = dataRow["count"]
+                try:
+                    combinedTable[asnRow["asn"]]
+                except KeyError:
+                    combinedTable[asnRow["asn"]] = {}
+                try:
+                    combinedTable[asnRow["asn"]]["sum(bytes)"] = combinedTable[
+                        asnRow["asn"]
+                    ]["sum(bytes)"] + int(dataRow["sum(bytes)"])
+                    combinedTable[asnRow["asn"]]["sum(bytes_in)"] = combinedTable[
+                        asnRow["asn"]
+                    ]["sum(bytes_in)"] + int(dataRow["sum(bytes_in)"])
+                    combinedTable[asnRow["asn"]]["sum(bytes_out)"] = combinedTable[
+                        asnRow["asn"]
+                    ]["sum(bytes_out)"] + int(dataRow["sum(bytes_out)"])
+                    combinedTable[asnRow["asn"]]["count"] = combinedTable[
+                        asnRow["asn"]
+                    ]["count"] + int(dataRow["count"])
+                except KeyError:
+                    combinedTable[asnRow["asn"]]["sum(bytes)"] = 0
+                    combinedTable[asnRow["asn"]]["sum(bytes)"] = combinedTable[
+                        asnRow["asn"]
+                    ]["sum(bytes)"] + int(dataRow["sum(bytes)"])
+                    combinedTable[asnRow["asn"]]["sum(bytes_in)"] = 0
+                    combinedTable[asnRow["asn"]]["sum(bytes_in)"] = combinedTable[
+                        asnRow["asn"]
+                    ]["sum(bytes_in)"] + int(dataRow["sum(bytes_in)"])
+                    combinedTable[asnRow["asn"]]["sum(bytes_out)"] = 0
+                    combinedTable[asnRow["asn"]]["sum(bytes_out)"] = combinedTable[
+                        asnRow["asn"]
+                    ]["sum(bytes_out)"] + int(dataRow["sum(bytes_out)"])
+                    combinedTable[asnRow["asn"]]["count"] = 0
+                    combinedTable[asnRow["asn"]]["count"] = combinedTable[
+                        asnRow["asn"]
+                    ]["count"] + int(dataRow["count"])
                 print(
                     "{} in {} at {}".format(
                         dataRow["four_oct"], asnRow["network"], asnRow["asn"]
@@ -118,15 +152,16 @@ def buildCombinedTable(asnTable, dataTable):
         smoothedTime = 0
         if len(smoothedList) > 0:
             smoothedTime = int((sum(smoothedList) / len(smoothedList)) - 12.5)
-        print(
-            "{}/{} Elapsed:{} Estimated:{} Smoothed:{}".format(
-                progress,
-                dataTableLen,
-                int(timeElapsed),
-                int(estimatedTime),
-                smoothedTime,
+        if progress % 10 == 0:
+            print(
+                "{}/{} Elapsed:{} Estimated:{} Smoothed:{}".format(
+                    progress,
+                    dataTableLen,
+                    int(timeElapsed),
+                    int(estimatedTime),
+                    smoothedTime,
+                )
             )
-        )
     return combinedTable, detailedTable
 
 
@@ -145,7 +180,7 @@ def main():
     combinedTable, detailedTable = buildCombinedTable(asnTable, dataTable)
     if args.debug == True:
         print(detailedTable)
-        print(combinedTable)
+        print(len(combinedTable))
     returnCode = True
     return returnCode
 
