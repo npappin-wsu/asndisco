@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import ipaddress, requests, argparse, csv
+import ipaddress, requests, argparse, csv, time
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--cached", action="store_true", default=False)
@@ -69,7 +69,6 @@ def parseDataTable(dataTable):
 def openDataFile(infile):
     data = open(infile, "r")
     dataFile = csv.DictReader(data, delimiter=",", quotechar='"')
-    # dataFile = dataFile.splitlines()[0:args.dlimit]
     outputList = []
     for row in dataFile:
         outputList.append(row)
@@ -80,21 +79,55 @@ def openDataFile(infile):
 
 
 def buildCombinedTable(asnTable, dataTable):
-    combinedTable = {}
+    combinedTable = []
+    detailedTable = []
+    dataTableLen = len(dataTable)
+    progress = int()
+    smoothedList = []
+    startTime = time.time()
     for dataRow in dataTable:
         if args.debug == True:
-            print(dataRow)
+            #            print(dataRow)
+            pass
         for asnRow in asnTable:
             if args.debug == True:
-                print(asnRow)
+                #                print(asnRow)
+                pass
             if dataRow["four_oct"] in asnRow["network"]:
+                dictToAppend = {}
+                dictToAppend["asn"] = asnRow["asn"]
+                dictToAppend["network"] = asnRow["network"]
+                dictToAppend["sum(bytes)"] = dataRow["sum(bytes)"]
+                dictToAppend["sum(bytes_in)"] = dataRow["sum(bytes_in)"]
+                dictToAppend["sum(bytes_out)"] = dataRow["sum(bytes_out)"]
+                dictToAppend["count"] = dataRow["count"]
                 print(
                     "{} in {} at {}".format(
                         dataRow["four_oct"], asnRow["network"], asnRow["asn"]
                     )
                 )
+                print(dictToAppend)
+                detailedTable.append(dictToAppend)
                 break
-    return True
+        progress = progress + 1
+        timeElapsed = time.time() - startTime
+        estimatedTime = (timeElapsed / (progress / dataTableLen)) - timeElapsed
+        smoothedList.append(estimatedTime)
+        if len(smoothedList) > 25:
+            smoothedList = smoothedList[1:]
+        smoothedTime = 0
+        if len(smoothedList) > 0:
+            smoothedTime = int((sum(smoothedList) / len(smoothedList)) - 12.5)
+        print(
+            "{}/{} Elapsed:{} Estimated:{} Smoothed:{}".format(
+                progress,
+                dataTableLen,
+                int(timeElapsed),
+                int(estimatedTime),
+                smoothedTime,
+            )
+        )
+    return combinedTable, detailedTable
 
 
 def main():
@@ -102,11 +135,16 @@ def main():
     asnTable = parseDataTable(asnTable)
     dataTable = openDataFile(args.infile)
     if args.debug == True:
-        print(asnTable)
+        print("\nBegin AsnTable")
+        # print(asnTable)
+        print("\nEnd AsnTable\n\n")
     if args.debug == True:
-        print(dataTable)
-    combinedTable = buildCombinedTable(asnTable, dataTable)
+        print("\nBegin dataTable")
+        # print(dataTable)
+        print("\nEnd dataTable\n\n")
+    combinedTable, detailedTable = buildCombinedTable(asnTable, dataTable)
     if args.debug == True:
+        print(detailedTable)
         print(combinedTable)
     returnCode = True
     return returnCode
