@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
 
-import ipaddress, requests, argparse, csv, time
+import ipaddress, requests, argparse, csv, time, pickle, requests, json
 
 parser = argparse.ArgumentParser()
+# parser.add_argument("--cached", action="store_true", default=True)
+# parser.add_argument("--debug", action="store_true", default=True)
 parser.add_argument("--cached", action="store_true", default=False)
 parser.add_argument("--debug", action="store_true", default=False)
+# parser.add_argument(
+#     "-i", "--infile", type=str, dest="infile", default=".\\19sept15_outbound.csv"
+# )
+# parser.add_argument(
+#     "-o", "--outfile", type=str, dest="outfile", default=".\\19sept15_obSummed.csv"
+# )
 parser.add_argument("-i", "--infile", type=str, dest="infile", required=True)
 parser.add_argument("-o", "--outfile", type=str, dest="outfile", required=True)
 parser.add_argument("-al", "--asnlimit", type=int, dest="alimit", default=-1)
 parser.add_argument("-dl", "--datalimit", type=int, dest="dlimit", default=-1)
+parser.add_argument("-nl", "--namelimit", type=int, dest="nlimit", default=-1)
 args = parser.parse_args()
 
 
 def getDataTable():
-    # Use cached copy of datatable from apnic.
-    if args.cached == True:
-        data = open("data-raw-table", "r")
-        text = data.read()
-        data.close()
-    # Downlaod and write out a cache to be used later.
-    else:
-        if args.debug == True:
-            print("begin download")
-        data = requests.get("http://thyme.apnic.net/current/data-raw-table")
-        if args.debug == True:
-            print("finish download")
-        # Write the cache.
-        text = data.text
-        output = open("data-raw-table", "w")
-        output.write(text)
-        output.close()
+    # Downlaod IP network to ASN data table.
+    if args.debug == True:
+        print("begin download")
+    data = requests.get("http://thyme.apnic.net/current/data-raw-table")
+    if args.debug == True:
+        print("finish download")
+    # Write the cache.
+    text = data.text
     parsed = text.splitlines()[0 : args.alimit]
     lookupDict = []
     for line in parsed:
@@ -50,20 +50,62 @@ def parseDataTable(dataTable):
         print("build dict complete")
     if args.debug == True:
         print("begin insertsort")
+    # Builds the sorting table
     sortTable = []
     for i in reversed(range(8, 33)):
         sortTable.append((i, []))
+    # Reads through the dataTable and sorts each line into a dictionary by subnet mask.
     for lineDict in dataTable:
         for thing in sortTable:
             if thing[0] == lineDict["mask"]:
                 thing[1].append(lineDict)
+                # print(lineDict)
                 break
-    returnTable = []
+    sortedTable = []
+    # Recombines the table sorted into a single list.
     for item in sortTable:
-        returnTable = returnTable + item[1]
+        sortedTable = sortedTable + item[1]
+        # print(item)
     if args.debug == True:
         print("end insertsort")
+    # Index based on first octet.
+    if args.debug == True:
+        print("begin indexing")
+    returnTable = {}
+    for i in range(1, 256):
+        returnTable[int(i)] = []
+    for line in sortedTable:
+        first_oct = int(line["subnet"].split(".")[0])
+        returnTable[first_oct].append(line)
+        # for thing in returnTable:
+        #     if thing[0] == int(line["subnet"].split(".")[0]):
+        #         thing[1].append(line)
+        #         break
+    if args.debug == True:
+        print("end indexing")
     return returnTable
+
+
+def getNameTable():
+    if args.debug == True:
+        print("Begin name table")
+    data = requests.get("http://ftp.arin.net/info/asn.txt")
+    text = data.text
+    asnDict = {}
+    parsed = text.splitlines()[0:args.nlimit]
+    for line in parsed:
+        # print(line)
+        try:
+            asn=int(line.split()[0])
+            asnDict[asn] = {}
+            asnDict[asn]["name"] = line.split()[1]
+        except ValueError:
+            pass
+        except IndexError:
+            pass
+    if args.debug == True:
+        print("End name table")
+    return asnDict
 
 
 def openDataFile(infile):
@@ -71,6 +113,12 @@ def openDataFile(infile):
     dataFile = csv.DictReader(data, delimiter=",", quotechar='"')
     outputList = []
     for row in dataFile:
+        if row["sum(bytes)"] == "":
+            row["sum(bytes)"] = 0
+        if row["sum(bytes_in)"] == "":
+            row["sum(bytes_in)"] = 0
+        if row["sum(bytes_out)"] == "":
+            row["sum(bytes_out)"] = 0
         outputList.append(row)
         row["four_oct"] = ipaddress.ip_address("{}.1".format(row["three_oct"]))
     data.close()
@@ -78,7 +126,7 @@ def openDataFile(infile):
     return outputList
 
 
-def buildCombinedTable(asnTable, dataTable):
+def buildCombinedTable(asnTable, dataTable, nameTable):
     combinedTable = {}
     detailedTable = []
     dataTableLen = len(dataTable)
@@ -87,11 +135,14 @@ def buildCombinedTable(asnTable, dataTable):
     startTime = time.time()
     for dataRow in dataTable:
         if args.debug == True:
-            #            print(dataRow)
+            # print(dataRow)
             pass
-        for asnRow in asnTable:
+        first_oct = int(dataRow["three_oct"].split(".")[0])
+        if first_oct == 0:
+            continue
+        for asnRow in asnTable[first_oct]:
             if args.debug == True:
-                #                print(asnRow)
+                # print(asnRow)
                 pass
             if dataRow["four_oct"] in asnRow["network"]:
                 dictToAppend = {}
@@ -105,6 +156,11 @@ def buildCombinedTable(asnTable, dataTable):
                     combinedTable[asnRow["asn"]]
                 except KeyError:
                     combinedTable[asnRow["asn"]] = {}
+                    asn = int(asnRow["asn"])
+                    try:
+                        combinedTable[asnRow["asn"]]["name"] = nameTable[asn]["name"]
+                    except KeyError:
+                        combinedTable[asnRow["asn"]]["name"] = "Unknown"
                 try:
                     combinedTable[asnRow["asn"]]["sum(bytes)"] = combinedTable[
                         asnRow["asn"]
@@ -135,12 +191,15 @@ def buildCombinedTable(asnTable, dataTable):
                     combinedTable[asnRow["asn"]]["count"] = combinedTable[
                         asnRow["asn"]
                     ]["count"] + int(dataRow["count"])
-                print(
-                    "{} in {} at {}".format(
-                        dataRow["four_oct"], asnRow["network"], asnRow["asn"]
+                if args.debug == True:
+                    print(
+                        "{} in {} at {}".format(
+                            dataRow["four_oct"], asnRow["network"], asnRow["asn"]
+                        )
                     )
-                )
-                print(dictToAppend)
+                if args.debug == True:
+                    print(dictToAppend)
+                    pass
                 detailedTable.append(dictToAppend)
                 break
         progress = progress + 1
@@ -151,12 +210,13 @@ def buildCombinedTable(asnTable, dataTable):
             smoothedList = smoothedList[1:]
         smoothedTime = 0
         if len(smoothedList) > 0:
-            smoothedTime = int((sum(smoothedList) / len(smoothedList)) - 12.5)
-        if progress % 10 == 0:
+            smoothedTime = int((sum(smoothedList) / len(smoothedList)))
+        if progress % 100 == 0:
             print(
-                "{}/{} Elapsed:{} Estimated:{} Smoothed:{}".format(
+                "{}/{} Percent:{} Elapsed:{} Estimated:{} Smoothed:{}".format(
                     progress,
                     dataTableLen,
+                    int((progress/dataTableLen)*100),
                     int(timeElapsed),
                     int(estimatedTime),
                     smoothedTime,
@@ -165,10 +225,49 @@ def buildCombinedTable(asnTable, dataTable):
     return combinedTable, detailedTable
 
 
+def pickleAll(asnTable, dataTable, nameTable):
+    with open("asnTable.pickle", "wb") as f:
+        pickle.dump(asnTable, f, pickle.HIGHEST_PROTOCOL)
+    with open("dataTable.pickle", "wb") as f:
+        pickle.dump(dataTable, f, pickle.HIGHEST_PROTOCOL)
+    with open("nameTable.pickle", "wb") as f:
+        pickle.dump(nameTable, f , pickle.HIGHEST_PROTOCOL)
+    pass
+
+
+def outputData(combinedTable):
+    # print(combinedTable.keys())
+    outputList = []
+    for key in combinedTable.keys():
+        dictToAppend = {}
+        dictToAppend["asn"] = key
+        dictToAppend["name"] = combinedTable[key]["name"]
+        dictToAppend["count"] = combinedTable[key]["count"]
+        dictToAppend["sum(bytes)"] = combinedTable[key]["sum(bytes)"]
+        dictToAppend["sum(bytes_in)"] = combinedTable[key]["sum(bytes_in)"]
+        dictToAppend["sum(bytes_out)"] = combinedTable[key]["sum(bytes_out)"]
+        outputList.append(dictToAppend)
+    keys = outputList[0].keys()
+    # print(sorted(outputList, key=lambda i: i["count"]))
+    with open(args.outfile, "w", newline="") as output_file:
+        dict_writer = csv.DictWriter(output_file, keys)
+        dict_writer.writeheader()
+        dict_writer.writerows(outputList)
+    return True
+
+
 def main():
-    asnTable = getDataTable()
-    asnTable = parseDataTable(asnTable)
+    if args.cached == True:
+        with open("asnTable.pickle", "rb") as f:
+            asnTable = pickle.load(f)
+        with open("nameTable.pickle", "rb") as f:
+            nameTable = pickle.load(f)
+    else:
+        asnTable = getDataTable()
+        asnTable = parseDataTable(asnTable)
+        nameTable = getNameTable()
     dataTable = openDataFile(args.infile)
+    pickleAll(asnTable, dataTable, nameTable)
     if args.debug == True:
         print("\nBegin AsnTable")
         # print(asnTable)
@@ -177,10 +276,11 @@ def main():
         print("\nBegin dataTable")
         # print(dataTable)
         print("\nEnd dataTable\n\n")
-    combinedTable, detailedTable = buildCombinedTable(asnTable, dataTable)
+    combinedTable, detailedTable = buildCombinedTable(asnTable, dataTable, nameTable)
     if args.debug == True:
         print(detailedTable)
         print(len(combinedTable))
+    outputData(combinedTable)
     returnCode = True
     return returnCode
 
